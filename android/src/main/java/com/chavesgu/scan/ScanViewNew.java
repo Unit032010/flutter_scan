@@ -168,6 +168,7 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
             task.cancel(true);
             task = null;
         }
+        this.getCameraInstance().close();
     }
 
     @Override
