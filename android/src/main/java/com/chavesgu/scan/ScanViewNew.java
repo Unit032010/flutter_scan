@@ -7,6 +7,7 @@ import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Rect;
+import android.hardware.Camera;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
@@ -26,6 +27,9 @@ import com.journeyapps.barcodescanner.CameraPreview;
 import com.journeyapps.barcodescanner.DefaultDecoderFactory;
 import com.journeyapps.barcodescanner.Size;
 import com.journeyapps.barcodescanner.SourceData;
+import com.journeyapps.barcodescanner.camera.CameraInstance;
+import com.journeyapps.barcodescanner.camera.CameraParametersCallback;
+import com.journeyapps.barcodescanner.camera.CameraSettings;
 import com.journeyapps.barcodescanner.camera.PreviewCallback;
 
 import java.io.File;
@@ -137,10 +141,18 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
 
     public void _resume() {
         this.resume();
+        updateZoomCamera();
     }
     public void _pause() {
         this.pause();
     }
+
+    @Override
+    public void pause() {
+        super.pause();
+        updateZoomCamera();
+    }
+
     public void toggleTorchMode(boolean mode) {
         this.setTorch(mode);
     }
@@ -220,4 +232,29 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
             }
         }
     }
+    void updateZoomCamera() {
+        if(this.getCameraInstance() == null){
+            resume();
+        }
+        if (this.getCameraInstance() != null) {
+            CameraSettings settings = this.getCameraInstance().getCameraSettings();
+            if (settings == null) {
+                settings = new CameraSettings();
+                this.getCameraInstance().setCameraSettings(settings);
+            }
+            settings.setAutoFocusEnabled(true);
+            this.getCameraInstance().changeCameraParameters(new CameraParametersCallback() {
+                @Override
+                public Camera.Parameters changeCameraParameters(Camera.Parameters params) {
+                    if (params.isZoomSupported()) {
+                        int maxZoom = params.getMaxZoom();
+                        params.setZoom(maxZoom);
+                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+                    }
+                    return params;
+                }
+            });
+        }
+    }
+
 }
