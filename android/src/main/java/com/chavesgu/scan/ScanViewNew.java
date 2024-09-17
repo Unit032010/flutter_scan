@@ -18,6 +18,7 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.google.zxing.BarcodeFormat;
 import com.google.zxing.DecodeHintType;
 import com.google.zxing.qrcode.QRCodeReader;
 import com.journeyapps.barcodescanner.BarcodeCallback;
@@ -25,6 +26,7 @@ import com.journeyapps.barcodescanner.BarcodeResult;
 import com.journeyapps.barcodescanner.BarcodeView;
 import com.journeyapps.barcodescanner.CameraPreview;
 import com.journeyapps.barcodescanner.DefaultDecoderFactory;
+import com.journeyapps.barcodescanner.ScanOptions;
 import com.journeyapps.barcodescanner.Size;
 import com.journeyapps.barcodescanner.SourceData;
 import com.journeyapps.barcodescanner.camera.CameraInstance;
@@ -37,7 +39,9 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.lang.ref.WeakReference;
+import java.util.Collections;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 import androidx.annotation.NonNull;
@@ -84,7 +88,7 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
 
     private void start() {
         addListenLifecycle();
-        this.setDecoderFactory(new DefaultDecoderFactory(QRCodeDecoder.allFormats, QRCodeDecoder.HINTS, "utf-8", 2));
+        this.setDecoderFactory(new DefaultDecoderFactory(Collections.singletonList(BarcodeFormat.QR_CODE), QRCodeDecoder.HINTS, "utf-8", 2));
         this.decodeContinuous(new BarcodeCallback() {
             @Override
             public void barcodeResult(BarcodeResult result) {
@@ -198,7 +202,7 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
     /**
      * AsyncTask 静态内部类，防止内存泄漏
      */
-    static class QrCodeAsyncTask extends AsyncTask<Bitmap, Integer, String> {
+        static class QrCodeAsyncTask extends AsyncTask<Bitmap, Integer, String> {
         private final WeakReference<ScanViewNew> mWeakReference;
 //        private final Bitmap bitmap;
 
@@ -243,19 +247,35 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
                 settings = new CameraSettings();
                 this.getCameraInstance().setCameraSettings(settings);
             }
-            settings.setAutoFocusEnabled(true);
+
             this.getCameraInstance().changeCameraParameters(new CameraParametersCallback() {
                 @Override
                 public Camera.Parameters changeCameraParameters(Camera.Parameters params) {
                     if (params.isZoomSupported()) {
                         int maxZoom = params.getMaxZoom();
                         params.setZoom(40);
-                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+                        params.setPreviewSize(1280, 720);
                     }
                     return params;
                 }
             });
+
+            settings.setAutoFocusEnabled(true);
+            settings.setBarcodeSceneModeEnabled(true);
+            settings.setFocusMode(CameraSettings.FocusMode.CONTINUOUS);
         }
     }
 
+    // Hàm tìm độ phân giải phù hợp
+    private Camera.Size getOptimalResolution(List<Camera.Size> sizes) {
+        Camera.Size optimalSize = null;
+        for (Camera.Size size : sizes) {
+            // Bạn có thể tùy chỉnh điều kiện lựa chọn kích thước
+            if (size.width <= 1280 && size.height <= 720) {
+                optimalSize = size;
+                break;
+            }
+        }
+        return optimalSize;
+    }
 }
