@@ -249,7 +249,7 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
                 public Camera.Parameters changeCameraParameters(Camera.Parameters params) {
                     if (params.isZoomSupported()) {
                         int maxZoom = params.getMaxZoom();
-                        params.setZoom(40);
+                        params.setZoom(20);
                         params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
                     }
                     return params;
