@@ -234,9 +234,10 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
         }
     }
     void updateZoomCamera() {
-        if(this.getCameraInstance() == null){
+        if (this.getCameraInstance() == null) {
             resume();
         }
+
         if (this.getCameraInstance() != null) {
             CameraSettings settings = this.getCameraInstance().getCameraSettings();
             if (settings == null) {
@@ -244,12 +245,30 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
                 this.getCameraInstance().setCameraSettings(settings);
             }
             settings.setAutoFocusEnabled(true);
+
             this.getCameraInstance().changeCameraParameters(new CameraParametersCallback() {
                 @Override
                 public Camera.Parameters changeCameraParameters(Camera.Parameters params) {
                     if (params.isZoomSupported()) {
                         int maxZoom = params.getMaxZoom();
-                        params.setZoom(40);
+
+                        // Lấy kích thước FramingRect
+                        Rect framingRect = getPreviewFramingRect();
+                        if (framingRect != null) {
+                            int frameWidth = framingRect.width();
+                            int frameHeight = framingRect.height();
+
+                            // Xác định mức zoom dựa trên kích thước của FramingRect (nếu mã QR nhỏ)
+                            // Ví dụ: Giảm kích thước của FramingRect thì tăng zoom
+                            int zoomLevel = calculateZoomLevel(frameWidth, frameHeight, maxZoom);
+
+                            // Set mức zoom linh hoạt
+                            params.setZoom(zoomLevel);
+                        } else {
+                            // Sử dụng mức zoom mặc định nếu không có framingRect
+                            params.setZoom(maxZoom / 2); // Zoom trung bình
+                        }
+
                         params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
                     }
                     return params;
@@ -257,5 +276,23 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
             });
         }
     }
+
+    private int calculateZoomLevel(int frameWidth, int frameHeight, int maxZoom) {
+        // Điều chỉnh zoom dựa trên kích thước mã QR (kích thước FramingRect)
+        // Nếu mã QR nhỏ (kích thước FramingRect nhỏ), tăng mức zoom.
+        // Giả sử giá trị zoom tỷ lệ nghịch với kích thước FramingRect
+
+        int minSize = Math.min(frameWidth, frameHeight);
+
+        // Xác định mức zoom. Ví dụ: nếu FramingRect nhỏ hơn 1/4 chiều rộng màn hình, thì zoom tối đa
+        if (minSize < 200) {
+            return maxZoom; // Zoom tối đa cho các mã QR rất nhỏ
+        } else if (minSize < 400) {
+            return maxZoom / 2; // Zoom trung bình cho các mã QR cỡ vừa
+        } else {
+            return maxZoom / 4; // Zoom nhỏ cho các mã QR lớn
+        }
+    }
+
 
 }
