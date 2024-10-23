@@ -31,7 +31,7 @@ import java.util.Map;
 
 public class QRCodeDecoder {
     private static byte[] yuvs;
-    public static int MAX_PICTURE_PIXEL = 256;
+    public static int MAX_PICTURE_PIXEL = 1024;  // Tăng kích thước ảnh lên 1024 pixel để giữ chi tiết mã QR
     public static final List<BarcodeFormat> allFormats = new ArrayList<BarcodeFormat>() {{
         add(BarcodeFormat.AZTEC);
         add(BarcodeFormat.CODABAR);
@@ -51,84 +51,94 @@ public class QRCodeDecoder {
         add(BarcodeFormat.UPC_E);
         add(BarcodeFormat.UPC_EAN_EXTENSION);
     }};
-    public static final Map<DecodeHintType, Object> HINTS = new EnumMap<DecodeHintType, Object>(DecodeHintType.class) {{
+
+    public static final Map<DecodeHintType, Object> HINTS = new EnumMap(DecodeHintType.class) {{
         put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
         put(DecodeHintType.POSSIBLE_FORMATS, allFormats);
         put(DecodeHintType.CHARACTER_SET, "utf-8");
     }};
+
     public static void config() {
+        // Place for any global configurations (if necessary)
     }
+
+    // Decode QR code from image path
     public static String syncDecodeQRCode(String path) {
         config();
         Bitmap bitmap = pathToBitMap(path, MAX_PICTURE_PIXEL, MAX_PICTURE_PIXEL);
-        int width = bitmap.getWidth();
-        int height = bitmap.getHeight();
-        byte[] mData = getYUV420sp(bitmap.getWidth(), bitmap.getHeight(), bitmap);
-
-        Result result = decodeImage(mData, width, height);
-        if (result!=null) return result.getText();
-        return null;
+        return decodeQRCodeFromBitmap(bitmap);
     }
+
+    // Decode QR code from a Bitmap object
     public static String syncDecodeQRCode(Bitmap bitmap) {
         config();
+        return decodeQRCodeFromBitmap(bitmap);
+    }
+
+    // Decode image using ZXing and fallback to HybridBinarizer if necessary
+    private static String decodeQRCodeFromBitmap(Bitmap bitmap) {
+        if (bitmap == null) return null;
+
         int width = bitmap.getWidth();
         int height = bitmap.getHeight();
-        byte[] mData = getYUV420sp(bitmap.getWidth(), bitmap.getHeight(), bitmap);
+        byte[] mData = getYUV420sp(width, height, bitmap);
+
+        // Ensure bitmap is recycled to free memory
+        bitmap.recycle();
 
         Result result = decodeImage(mData, width, height);
-        if (result!=null) return result.getText();
+        if (result != null) return result.getText();
         return null;
     }
 
+    // Decode byte array image using ZXing
     private static Result decodeImage(byte[] data, int width, int height) {
-        // 处理
         Result result = null;
         try {
             PlanarYUVLuminanceSource source =
                     new PlanarYUVLuminanceSource(data, width, height, 0, 0, width, height, false);
-            BinaryBitmap bitmap1 = new BinaryBitmap(new GlobalHistogramBinarizer(source));
-            QRCodeReader reader2 = new QRCodeReader();
-            result = reader2.decode(bitmap1, HINTS);
+            BinaryBitmap binaryBitmap = new BinaryBitmap(new GlobalHistogramBinarizer(source));
+            QRCodeReader reader = new QRCodeReader();
+            result = reader.decode(binaryBitmap, HINTS);
         } catch (FormatException | ChecksumException ignored) {
+            // You can log these exceptions if needed
         } catch (NotFoundException e) {
+            // Fallback to HybridBinarizer for more robust scanning
             PlanarYUVLuminanceSource source =
                     new PlanarYUVLuminanceSource(data, width, height, 0, 0, width, height, false);
-             BinaryBitmap bitmap1 = new BinaryBitmap(new HybridBinarizer(source));
-            QRCodeReader reader2 = new QRCodeReader();
+            BinaryBitmap binaryBitmap = new BinaryBitmap(new HybridBinarizer(source));
+            QRCodeReader reader = new QRCodeReader();
             try {
-                result = reader2.decode(bitmap1, HINTS);
+                result = reader.decode(binaryBitmap, HINTS);
             } catch (NotFoundException | ChecksumException | FormatException ignored) {
+                // Log these exceptions if needed
             }
         }
         return result;
     }
 
+    // Convert image path to Bitmap
     private static Bitmap pathToBitMap(String imgPath, int reqWidth, int reqHeight) {
         final BitmapFactory.Options options = new BitmapFactory.Options();
         options.inJustDecodeBounds = true;
         BitmapFactory.decodeFile(imgPath, options);
 
-        // Calculate inSampleSize
         options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight);
 
-        // Decode bitmap with inSampleSize set
         options.inJustDecodeBounds = false;
         return BitmapFactory.decodeFile(imgPath, options);
     }
 
+    // Calculate optimal sample size
     private static int calculateInSampleSize(BitmapFactory.Options options, int reqWidth, int reqHeight) {
-        // Raw height and width of image
         final int height = options.outHeight;
         final int width = options.outWidth;
         int inSampleSize = 1;
 
         if (height > reqHeight || width > reqWidth) {
-
             final int halfHeight = height / 2;
             final int halfWidth = width / 2;
 
-            // Calculate the largest inSampleSize value that is a power of 2 and keeps both
-            // height and width larger than the requested height and width.
             while ((halfHeight / inSampleSize) > reqHeight && (halfWidth / inSampleSize) > reqWidth) {
                 inSampleSize *= 2;
             }
@@ -137,111 +147,73 @@ public class QRCodeDecoder {
         return inSampleSize;
     }
 
-    private static byte[] getYUV420sp(int inputWidth, int inputHeight, Bitmap scaled) {
-        int[] argb = new int[inputWidth * inputHeight];
+    // Convert Bitmap to YUV420sp byte array
+    private static byte[] getYUV420sp(int width, int height, Bitmap scaled) {
+        int[] argb = new int[width * height];
+        scaled.getPixels(argb, 0, width, 0, 0, width, height);
 
-        scaled.getPixels(argb, 0, inputWidth, 0, 0, inputWidth, inputHeight);
-
-        int requiredWidth = inputWidth % 2 == 0 ? inputWidth : inputWidth + 1;
-        int requiredHeight = inputHeight % 2 == 0 ? inputHeight : inputHeight + 1;
-
-        int byteLength = requiredWidth * requiredHeight * 3 / 2;
+        int byteLength = width * height * 3 / 2;
         if (yuvs == null || yuvs.length < byteLength) {
             yuvs = new byte[byteLength];
         } else {
             Arrays.fill(yuvs, (byte) 0);
         }
 
-        encodeYUV420SP(yuvs, argb, inputWidth, inputHeight);
-
-        scaled.recycle();
-
+        encodeYUV420SP(yuvs, argb, width, height);
         return yuvs;
     }
 
+    // Convert ARGB to YUV420SP format
     private static void encodeYUV420SP(byte[] yuv420sp, int[] argb, int width, int height) {
-        // 帧图片的像素大小
         final int frameSize = width * height;
-        // ---YUV数据---
-        int Y, U, V;
-        // Y的index从0开始
         int yIndex = 0;
-        // UV的index从frameSize开始
         int uvIndex = frameSize;
+        int R, G, B, Y, U, V;
 
-        // ---颜色数据---
-        // int a, R, G, B;
-        int R, G, B;
-        //
-        int argbIndex = 0;
-        //
-
-        // ---循环所有像素点，RGB转YUV---
         for (int j = 0; j < height; j++) {
             for (int i = 0; i < width; i++) {
+                R = (argb[yIndex] & 0xff0000) >> 16;
+                G = (argb[yIndex] & 0xff00) >> 8;
+                B = argb[yIndex] & 0xff;
 
-                // a is not used obviously
-                // a = (argb[argbIndex] & 0xff000000) >> 24;
-                R = (argb[argbIndex] & 0xff0000) >> 16;
-                G = (argb[argbIndex] & 0xff00) >> 8;
-                B = (argb[argbIndex] & 0xff);
-                //
-                argbIndex++;
-
-                // well known RGB to YUV algorithm
                 Y = ((66 * R + 129 * G + 25 * B + 128) >> 8) + 16;
                 U = ((-38 * R - 74 * G + 112 * B + 128) >> 8) + 128;
                 V = ((112 * R - 94 * G - 18 * B + 128) >> 8) + 128;
 
-                //
-                Y = Math.max(0, Math.min(Y, 255));
-                U = Math.max(0, Math.min(U, 255));
-                V = Math.max(0, Math.min(V, 255));
-
-                // NV21 has a plane of Y and interleaved planes of VU each sampled by a factor of 2
-                // meaning for every 4 Y pixels there are 1 V and 1 U. Note the sampling is every other
-                // pixel AND every other scanline.
-                // ---Y---
-                yuv420sp[yIndex++] = (byte) Y;
-                // ---UV---
+                yuv420sp[yIndex++] = (byte) Math.max(0, Math.min(Y, 255));
                 if ((j % 2 == 0) && (i % 2 == 0)) {
-                    //
-                    yuv420sp[uvIndex++] = (byte) V;
-                    //
-                    yuv420sp[uvIndex++] = (byte) U;
+                    yuv420sp[uvIndex++] = (byte) Math.max(0, Math.min(V, 255));
+                    yuv420sp[uvIndex++] = (byte) Math.max(0, Math.min(U, 255));
                 }
             }
         }
     }
 
-
+    // Decode QR code using Huawei ScanKit or fallback to ZXing
     public static String decodeQRCode(Context context, String path) {
-        BitmapFactory.Options sizeOptions = new BitmapFactory.Options();
-        sizeOptions.inJustDecodeBounds = true;
-        BitmapFactory.decodeFile(path, sizeOptions);
-        BitmapFactory.Options decodeOptions = new BitmapFactory.Options();
-        if (sizeOptions.outWidth * sizeOptions.outHeight * 3 > 10 * 1024 * 1024) {
-            Log.i("scan", String.format("bitmap too large %d x %d",sizeOptions.outWidth, sizeOptions.outHeight));
-            decodeOptions.inSampleSize = 2;
-        }
-        Bitmap bitmap = BitmapFactory.decodeFile(path, decodeOptions);
-
-        HmsScanAnalyzerOptions options = new HmsScanAnalyzerOptions.Creator().setPhotoMode(true).create();
-        HmsScan[] hmsScans = ScanUtil.decodeWithBitmap(context, bitmap, options);
-
-        if (hmsScans != null && hmsScans.length > 0) {
-            return hmsScans[0].getOriginalValue();
-        }
-        return syncDecodeQRCode(path);
+        Bitmap bitmap = pathToBitMap(path, MAX_PICTURE_PIXEL, MAX_PICTURE_PIXEL);
+        return decodeQRCodeFromBitmap(context, bitmap, path);
     }
 
+    // Decode QR code from bitmap using Huawei ScanKit first, fallback to ZXing
     public static String decodeQRCode(Context context, Bitmap bitmap) {
+        return decodeQRCodeFromBitmap(context, bitmap, null);
+    }
+
+    // Unified method for handling ScanKit and ZXing
+    private static String decodeQRCodeFromBitmap(Context context, Bitmap bitmap, String fallbackPath) {
+        if (bitmap == null) return null;
+
+        // Try Huawei ScanKit first
         HmsScanAnalyzerOptions options = new HmsScanAnalyzerOptions.Creator().setPhotoMode(true).create();
         HmsScan[] hmsScans = ScanUtil.decodeWithBitmap(context, bitmap, options);
 
         if (hmsScans != null && hmsScans.length > 0) {
             return hmsScans[0].getOriginalValue();
         }
-        return syncDecodeQRCode(bitmap);
+
+        // Fallback to ZXing if ScanKit fails
+        return fallbackPath != null ? syncDecodeQRCode(fallbackPath) : syncDecodeQRCode(bitmap);
     }
 }
+
