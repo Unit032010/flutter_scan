@@ -3,35 +3,36 @@ package com.chavesgu.scan;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.util.Log;
+import android.graphics.ImageFormat;
+import android.graphics.Rect;
+import android.graphics.YuvImage;
 
 import com.google.zxing.ChecksumException;
 import com.google.zxing.FormatException;
 import com.google.zxing.NotFoundException;
 import com.google.zxing.PlanarYUVLuminanceSource;
+import com.google.zxing.RGBLuminanceSource;
 import com.google.zxing.Result;
 import com.google.zxing.qrcode.QRCodeReader;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.BinaryBitmap;
 import com.google.zxing.DecodeHintType;
-import com.google.zxing.MultiFormatReader;
-import com.google.zxing.RGBLuminanceSource;
 import com.google.zxing.common.GlobalHistogramBinarizer;
 import com.google.zxing.common.HybridBinarizer;
 import com.huawei.hms.hmsscankit.ScanUtil;
 import com.huawei.hms.ml.scan.HmsScan;
 import com.huawei.hms.ml.scan.HmsScanAnalyzerOptions;
 
+import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumMap;
-import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
 
 public class QRCodeDecoder {
     private static byte[] yuvs;
-    public static int MAX_PICTURE_PIXEL = 1024;  // Tăng kích thước ảnh lên 1024 pixel để giữ chi tiết mã QR
+    public static int MAX_PICTURE_PIXEL = 800;
     public static final List<BarcodeFormat> allFormats = new ArrayList<BarcodeFormat>() {{
         add(BarcodeFormat.AZTEC);
         add(BarcodeFormat.CODABAR);
@@ -54,12 +55,14 @@ public class QRCodeDecoder {
 
     public static final Map<DecodeHintType, Object> HINTS = new EnumMap(DecodeHintType.class) {{
         put(DecodeHintType.TRY_HARDER, Boolean.TRUE);
-        put(DecodeHintType.POSSIBLE_FORMATS, allFormats);
+        put(DecodeHintType.POSSIBLE_FORMATS, BarcodeFormat.QR_CODE);
         put(DecodeHintType.CHARACTER_SET, "utf-8");
     }};
-
+    private static QRCodeReader qrCodeReader;
     public static void config() {
-        // Place for any global configurations (if necessary)
+        if (qrCodeReader == null) {
+            qrCodeReader = new QRCodeReader();
+        }
     }
 
     // Decode QR code from image path
@@ -77,18 +80,36 @@ public class QRCodeDecoder {
 
     // Decode image using ZXing and fallback to HybridBinarizer if necessary
     private static String decodeQRCodeFromBitmap(Bitmap bitmap) {
+//        if (bitmap == null) return null;
+//
+//        int width = bitmap.getWidth();
+//        int height = bitmap.getHeight();
+//        byte[] mData = getYUV420sp(width, height, bitmap);
+//
+//        // Ensure bitmap is recycled to free memory
+//        bitmap.recycle();
+//
+//        Result result = decodeImage(mData, width, height);
+//        if (result != null) return result.getText();
+//        return null;
+
         if (bitmap == null) return null;
 
-        int width = bitmap.getWidth();
-        int height = bitmap.getHeight();
-        byte[] mData = getYUV420sp(width, height, bitmap);
+        try {
+            int width = bitmap.getWidth();
+            int height = bitmap.getHeight();
+            int[] pixels = new int[width * height];
+            bitmap.getPixels(pixels, 0, width, 0, 0, width, height);
 
-        // Ensure bitmap is recycled to free memory
-        bitmap.recycle();
+            // Sử dụng RGBLuminanceSource thay vì chuyển đổi YUV
+            RGBLuminanceSource source = new RGBLuminanceSource(width, height, pixels);
+            BinaryBitmap binaryBitmap = new BinaryBitmap(new HybridBinarizer(source));
 
-        Result result = decodeImage(mData, width, height);
-        if (result != null) return result.getText();
-        return null;
+            Result result = qrCodeReader.decode(binaryBitmap, HINTS);
+            return result.getText();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // Decode byte array image using ZXing
@@ -99,7 +120,8 @@ public class QRCodeDecoder {
                     new PlanarYUVLuminanceSource(data, width, height, 0, 0, width, height, false);
             BinaryBitmap binaryBitmap = new BinaryBitmap(new GlobalHistogramBinarizer(source));
             QRCodeReader reader = new QRCodeReader();
-            result = reader.decode(binaryBitmap, HINTS);
+            //result = reader.decode(binaryBitmap, HINTS);
+            result = qrCodeReader.decode(binaryBitmap, HINTS);
         } catch (FormatException | ChecksumException ignored) {
             // You can log these exceptions if needed
         } catch (NotFoundException e) {
@@ -109,7 +131,8 @@ public class QRCodeDecoder {
             BinaryBitmap binaryBitmap = new BinaryBitmap(new HybridBinarizer(source));
             QRCodeReader reader = new QRCodeReader();
             try {
-                result = reader.decode(binaryBitmap, HINTS);
+                //result = reader.decode(binaryBitmap, HINTS);
+                result = qrCodeReader.decode(binaryBitmap, HINTS);
             } catch (NotFoundException | ChecksumException | FormatException ignored) {
                 // Log these exceptions if needed
             }
@@ -199,6 +222,25 @@ public class QRCodeDecoder {
     public static String decodeQRCode(Context context, Bitmap bitmap) {
         return decodeQRCodeFromBitmap(context, bitmap, null);
     }
+
+    public static String decodeQRCode(Context context, byte[] nv21, int width, int height) {
+        // Chuyển NV21 thành Bitmap tạm thời (nếu dùng ZXing cũ) hoặc dùng Huawei ScanKit trực tiếp
+        try {
+            // Chuyển NV21 sang Bitmap
+            YuvImage yuv = new YuvImage(nv21, ImageFormat.NV21, width, height, null);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            yuv.compressToJpeg(new Rect(0, 0, width, height), 100, out);
+            byte[] jpegBytes = out.toByteArray();
+            Bitmap bitmap = BitmapFactory.decodeByteArray(jpegBytes, 0, jpegBytes.length);
+
+            // Dùng hàm decode cũ
+            return decodeQRCode(context, bitmap);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
 
     // Unified method for handling ScanKit and ZXing
     private static String decodeQRCodeFromBitmap(Context context, Bitmap bitmap, String fallbackPath) {
