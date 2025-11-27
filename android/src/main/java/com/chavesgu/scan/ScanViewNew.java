@@ -1,43 +1,26 @@
 package com.chavesgu.scan;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
-import android.graphics.Rect;
 import android.hardware.Camera;
 import android.os.AsyncTask;
 import android.os.Build;
-import android.os.Bundle;
-import android.os.Environment;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.util.AttributeSet;
 import android.util.Log;
-import android.widget.Toast;
-
-import com.google.zxing.DecodeHintType;
-import com.google.zxing.qrcode.QRCodeReader;
 import com.journeyapps.barcodescanner.BarcodeCallback;
 import com.journeyapps.barcodescanner.BarcodeResult;
 import com.journeyapps.barcodescanner.BarcodeView;
-import com.journeyapps.barcodescanner.CameraPreview;
 import com.journeyapps.barcodescanner.DefaultDecoderFactory;
 import com.journeyapps.barcodescanner.Size;
-import com.journeyapps.barcodescanner.SourceData;
-import com.journeyapps.barcodescanner.camera.CameraInstance;
 import com.journeyapps.barcodescanner.camera.CameraParametersCallback;
 import com.journeyapps.barcodescanner.camera.CameraSettings;
-import com.journeyapps.barcodescanner.camera.PreviewCallback;
-
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.OutputStream;
 import java.lang.ref.WeakReference;
-import java.util.EnumMap;
 import java.util.Map;
 
 import androidx.annotation.NonNull;
@@ -60,7 +43,6 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
     private int CAMERA_REQUEST_CODE = 6537;
     private Context context;
     private Activity activity;
-    private ActivityPluginBinding activityPluginBinding;
     private Application.ActivityLifecycleCallbacks lifecycleCallback;
 
     private double vw;
@@ -74,8 +56,7 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
 
         this.context = context;
         this.activity = activity;
-        activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
-        this.activityPluginBinding = activityPluginBinding;
+        activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
         activityPluginBinding.addRequestPermissionsResultListener(this);
         this.scale = (double) args.get("scale");
 
@@ -136,7 +117,7 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
     }
 
     private void addListenLifecycle() {
-//        activity.getApplication().registerActivityLifecycleCallbacks(lifecycleCallback);
+        activity.getApplication().registerActivityLifecycleCallbacks(lifecycleCallback);
     }
 
     public void _resume() {
@@ -160,10 +141,10 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
         this.captureListener = captureListener;
     }
     public void dispose() {
-//        this.stopDecoding();
+        this.stopDecoding();
         _pause();
-//        activity.getApplication().unregisterActivityLifecycleCallbacks(lifecycleCallback);
-//        lifecycleCallback = null;
+        activity.getApplication().unregisterActivityLifecycleCallbacks(lifecycleCallback);
+        lifecycleCallback = null;
         if (task != null) {
             task.cancel(true);
             task = null;
@@ -171,6 +152,7 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
         this.getCameraInstance().close();
     }
 
+    @SuppressLint("DrawAllocation")
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         super.onLayout(changed, l, t, r, b);
@@ -234,65 +216,28 @@ public class ScanViewNew extends BarcodeView implements PluginRegistry.RequestPe
         }
     }
     void updateZoomCamera() {
-        if (this.getCameraInstance() == null) {
+        if(this.getCameraInstance() == null){
             resume();
         }
-
         if (this.getCameraInstance() != null) {
             CameraSettings settings = this.getCameraInstance().getCameraSettings();
             if (settings == null) {
                 settings = new CameraSettings();
-                this.getCameraInstance().setCameraSettings(settings);
             }
             settings.setAutoFocusEnabled(true);
+            settings.setFocusMode(CameraSettings.FocusMode.CONTINUOUS);
 
-            this.getCameraInstance().changeCameraParameters(new CameraParametersCallback() {
-                @Override
-                public Camera.Parameters changeCameraParameters(Camera.Parameters params) {
-                    if (params.isZoomSupported()) {
-                        int maxZoom = params.getMaxZoom();
-
-                        // Lấy kích thước FramingRect
-                        Rect framingRect = getPreviewFramingRect();
-                        if (framingRect != null) {
-                            int frameWidth = framingRect.width();
-                            int frameHeight = framingRect.height();
-
-                            // Xác định mức zoom dựa trên kích thước của FramingRect (nếu mã QR nhỏ)
-                            // Ví dụ: Giảm kích thước của FramingRect thì tăng zoom
-                            int zoomLevel = calculateZoomLevel(frameWidth, frameHeight, maxZoom);
-
-                            // Set mức zoom linh hoạt
-                            params.setZoom(zoomLevel);
-                        } else {
-                            // Sử dụng mức zoom mặc định nếu không có framingRect
-                            params.setZoom(maxZoom / 2); // Zoom trung bình
-                        }
-
-                        params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
-                    }
-                    return params;
+            this.getCameraInstance().changeCameraParameters(params -> {
+                if (params.isZoomSupported()) {
+                    int maxZoom = params.getMaxZoom();
+                    params.setZoom(30);
+                    params.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
                 }
+                return params;
             });
+
+            this.getCameraInstance().setCameraSettings(settings);
         }
     }
-
-    private int calculateZoomLevel(int frameWidth, int frameHeight, int maxZoom) {
-        // Điều chỉnh zoom dựa trên kích thước mã QR (kích thước FramingRect)
-        // Nếu mã QR nhỏ (kích thước FramingRect nhỏ), tăng mức zoom.
-        // Giả sử giá trị zoom tỷ lệ nghịch với kích thước FramingRect
-
-        int minSize = Math.min(frameWidth, frameHeight);
-
-        // Xác định mức zoom. Ví dụ: nếu FramingRect nhỏ hơn 1/4 chiều rộng màn hình, thì zoom tối đa
-        if (minSize < 200) {
-            return maxZoom; // Zoom tối đa cho các mã QR rất nhỏ
-        } else if (minSize < 400) {
-            return maxZoom / 2; // Zoom trung bình cho các mã QR cỡ vừa
-        } else {
-            return maxZoom / 4; // Zoom nhỏ cho các mã QR lớn
-        }
-    }
-
 
 }
