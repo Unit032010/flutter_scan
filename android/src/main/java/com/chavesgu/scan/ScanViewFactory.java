@@ -8,8 +8,6 @@ import java.util.Map;
 import androidx.annotation.NonNull;
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.BinaryMessenger;
-import io.flutter.plugin.common.MessageCodec;
-import io.flutter.plugin.common.PluginRegistry;
 import io.flutter.plugin.common.StandardMessageCodec;
 import io.flutter.plugin.platform.PlatformView;
 import io.flutter.plugin.platform.PlatformViewFactory;
@@ -20,6 +18,7 @@ public class ScanViewFactory extends PlatformViewFactory {
     @NonNull private final Activity activity;
     private ActivityPluginBinding activityPluginBinding;
 
+    @SuppressWarnings("deprecation")
     ScanViewFactory(@NonNull BinaryMessenger messenger, @NonNull Context context, @NonNull Activity activity, @NonNull ActivityPluginBinding activityPluginBinding) {
         super(StandardMessageCodec.INSTANCE);
         this.messenger = messenger;
