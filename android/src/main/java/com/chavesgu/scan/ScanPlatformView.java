@@ -1,10 +1,7 @@
 package com.chavesgu.scan;
 
-import android.Manifest;
 import android.app.Activity;
 import android.content.Context;
-import android.os.Build;
-import android.util.Log;
 import android.view.View;
 
 import java.util.Map;
@@ -16,7 +13,6 @@ import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
-import io.flutter.plugin.common.PluginRegistry;
 import io.flutter.plugin.platform.PlatformView;
 
 public class ScanPlatformView implements PlatformView, MethodChannel.MethodCallHandler, ScanViewNew.CaptureListener {
@@ -25,7 +21,6 @@ public class ScanPlatformView implements PlatformView, MethodChannel.MethodCallH
     private Activity activity;
     private ActivityPluginBinding activityPluginBinding;
     private ParentView parentView;
-//    private ScanView scanView;
     private ScanViewNew scanViewNew;
     private ScanDrawView scanDrawView;
     private boolean flashlight;
@@ -42,12 +37,15 @@ public class ScanPlatformView implements PlatformView, MethodChannel.MethodCallH
     private void initForBinding(Map<String, Object> args) {
         this.scanViewNew = new ScanViewNew(context, activity, activityPluginBinding,  args);
         this.scanViewNew.setCaptureListener(this);
-
-        this.scanDrawView = new ScanDrawView(context, activity, args);
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            this.scanDrawView = new ScanDrawView(context, activity, args);
+        }
 
         this.parentView = new ParentView(context);
         this.parentView.addView(this.scanViewNew);
-        this.parentView.addView(this.scanDrawView);
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            this.parentView.addView(this.scanDrawView);
+        }
     }
 
     @Override
@@ -73,11 +71,15 @@ public class ScanPlatformView implements PlatformView, MethodChannel.MethodCallH
 
     private void resume() {
         this.scanViewNew.resume();
-        this.scanDrawView.resume();
+        if (android.os.Build.VERSION.SDK_INT >= 30 && this.scanDrawView != null) {
+            this.scanDrawView.resume();
+        }
     }
     private void pause() {
         this.scanViewNew.pause();
-        this.scanDrawView.pause();
+        if (android.os.Build.VERSION.SDK_INT >= 30 && this.scanDrawView != null) {
+            this.scanDrawView.pause();
+        }
     }
     private void toggleTorchMode() {
         this.scanViewNew.toggleTorchMode(!flashlight);
