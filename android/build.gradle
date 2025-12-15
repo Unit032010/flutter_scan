@@ -40,5 +40,5 @@ dependencies {
     implementation('com.journeyapps:zxing-android-embedded:4.3.0') { transitive = false }
     implementation 'androidx.appcompat:appcompat:1.7.1'
     implementation 'com.google.zxing:core:3.5.4'
-    implementation 'com.huawei.hms:scanplus:2.1.0.300'
+    implementation 'com.huawei.hms:scanplus:2.13.0.303'
 }
